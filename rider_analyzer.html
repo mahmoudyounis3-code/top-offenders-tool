@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔍 Rider Performance Analyzer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: #f0f2f5; color: #1a1a2e; min-height: 100vh; }
+
+.header {
+  background: linear-gradient(135deg, #1a0a08, #3d1a10);
+  color: white;
+  padding: 16px 30px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.45);
+}
+.header-logo {
+  width: 48px; height: 48px;
+  background: #e65100;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(230,81,0,0.5);
+}
+.header h1 { font-size: 21px; font-weight: 800; letter-spacing: 0.3px; }
+.header p { font-size: 13px; opacity: 0.7; margin-top: 3px; }
+
+.container { max-width: 1500px; margin: 0 auto; padding: 22px 20px; }
+
+/* ── Upload ── */
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+.upload-card {
+  background: white;
+  border-radius: 14px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  border: 2.5px dashed #d0d5dd;
+  transition: all 0.2s;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.upload-card:hover { border-color: #ff6b35; background: #fff8f5; }
+.upload-card.drag-over { border-color: #ff6b35; background: #fff3ee; transform: scale(1.01); }
+.upload-card.loaded { border-color: #43a047; border-style: solid; background: #f1faf2; }
+.upload-icon { font-size: 42px; margin-bottom: 10px; display: block; }
+.upload-card h3 { font-size: 16px; color: #222; margin-bottom: 5px; font-weight: 700; }
+.upload-card p { font-size: 12.5px; color: #888; line-height: 1.6; }
+.upload-card .file-name { color: #2e7d32; font-weight: 700; font-size: 13px; margin-top: 10px; }
+
+input[type=file] { display: none; }
+
+.analyze-btn {
+  width: 100%; padding: 15px;
+  background: linear-gradient(135deg, #e53935, #ff6b35);
+  color: white; border: none; border-radius: 12px;
+  font-size: 16px; font-weight: 800; cursor: pointer;
+  margin-bottom: 20px; letter-spacing: 0.5px;
+  box-shadow: 0 4px 14px rgba(229,57,53,0.35);
+  transition: opacity 0.2s, transform 0.1s;
+}
+.analyze-btn:disabled { opacity: 0.35; cursor: not-allowed; box-shadow: none; }
+.analyze-btn:not(:disabled):hover { opacity: 0.92; }
+.analyze-btn:not(:disabled):active { transform: scale(0.99); }
+
+/* ── Search ── */
+.search-wrap {
+  background: white; border-radius: 12px;
+  padding: 16px 20px; margin-bottom: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  display: none;
+}
+.search-wrap input {
+  width: 100%; padding: 11px 16px;
+  border: 2px solid #eee; border-radius: 9px;
+  font-size: 15px; outline: none;
+  transition: border-color 0.2s;
+  text-align: right;
+  font-family: inherit;
+}
+.search-wrap input:focus { border-color: #ff6b35; }
+.search-result { margin-top: 14px; display: none; }
+
+.rider-card {
+  background: #f8f9fa; border-radius: 10px;
+  padding: 16px; border: 1px solid #eee;
+}
+.rider-card-top { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; text-align: center; margin-bottom: 14px; }
+.rider-card-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.rc-num { font-size: 22px; font-weight: 800; }
+.rc-label { font-size: 11.5px; color: #888; margin-top: 2px; }
+.rc-metric { padding: 10px; border-radius: 9px; text-align: center; }
+
+/* ── Summary ── */
+.summary-bar {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 14px; margin-bottom: 20px;
+}
+.sum-card {
+  background: white; border-radius: 11px; padding: 16px;
+  text-align: center; box-shadow: 0 1px 6px rgba(0,0,0,0.07);
+}
+.sum-card .n { font-size: 30px; font-weight: 900; color: #ff6b35; line-height: 1; }
+.sum-card .l { font-size: 12px; color: #888; margin-top: 4px; }
+
+/* ── Zone Tabs ── */
+.zone-tabs { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.zone-tab {
+  padding: 10px 24px; border: none; border-radius: 9px;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  background: white; color: #555;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  transition: all 0.2s; font-family: inherit;
+}
+.zone-tab.active { background: linear-gradient(135deg, #e53935, #ff6b35); color: white; box-shadow: 0 3px 10px rgba(229,57,53,0.3); }
+.zone-tab:hover:not(.active) { background: #f5f5f5; }
+
+.zone-section { display: none; }
+.zone-section.active { display: block; }
+
+/* ── Metric Grid ── */
+.metric-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+@media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .metric-grid { grid-template-columns: 1fr; } }
+
+.metric-card {
+  background: white; border-radius: 13px;
+  overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.09);
+}
+
+.metric-hdr {
+  padding: 14px 16px; color: white;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.mh-noshow { background: linear-gradient(135deg, #c62828, #e53935); }
+.mh-breaks  { background: linear-gradient(135deg, #e65100, #ff9800); }
+.mh-late    { background: linear-gradient(135deg, #f57f17, #fdd835); color: #3e2723; }
+.mh-avp     { background: linear-gradient(135deg, #6a1b9a, #ab47bc); }
+
+.metric-hdr h3 { font-size: 15px; font-weight: 800; }
+.metric-hdr .badge {
+  background: rgba(255,255,255,0.25); padding: 3px 10px;
+  border-radius: 20px; font-size: 12px; font-weight: 700;
+}
+
+.copy-row {
+  display: flex; gap: 7px; padding: 9px 12px;
+  background: #fafafa; border-bottom: 1px solid #f0f0f0;
+}
+.cbtn {
+  padding: 5px 13px; border: 1.5px solid #ddd; border-radius: 7px;
+  font-size: 12px; cursor: pointer; background: white;
+  font-family: inherit; transition: all 0.15s;
+}
+.cbtn:hover { background: #e8f5e9; border-color: #43a047; color: #2e7d32; }
+.cbtn.ok { background: #43a047; color: white; border-color: #43a047; }
+
+.tbl-wrap { max-height: 500px; overflow-y: auto; }
+.mtbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+.mtbl thead th {
+  padding: 7px 8px; text-align: right;
+  background: #f5f6f8; color: #555; font-weight: 700;
+  border-bottom: 2px solid #eee; position: sticky; top: 0; z-index: 1;
+}
+.mtbl tbody tr { border-bottom: 1px solid #f3f3f3; transition: background 0.1s; }
+.mtbl tbody tr:hover { background: #fafbff; }
+.mtbl td { padding: 6px 8px; }
+.td-rank { color: #bbb; font-size: 12px; width: 28px; text-align: center; }
+.td-id { font-family: 'Courier New', monospace; color: #1565c0; font-weight: 700; font-size: 13px; }
+.td-name { color: #333; }
+.td-zone { color: #888; font-size: 12px; }
+.td-val { font-weight: 800; text-align: center; }
+.val-red    { color: #c62828; }
+.val-orange { color: #e65100; }
+.val-yellow { color: #f57f17; }
+.val-purple { color: #6a1b9a; }
+
+.results-wrap { display: none; }
+.no-data { text-align: center; color: #aaa; padding: 30px; font-size: 14px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-logo">
+    <svg width="30" height="30" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect x="38" y="10" width="24" height="55" rx="12" fill="white"/>
+      <rect x="15" y="10" width="70" height="22" rx="11" fill="white"/>
+      <rect x="38" y="55" width="24" height="20" rx="10" fill="white"/>
+    </svg>
+  </div>
+  <div>
+    <h1>Rider Performance Analyzer</h1>
+    <p>Top Offenders — No Shows · Breaks · Late Logins</p>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- Upload -->
+  <div class="upload-grid">
+    <div class="upload-card" id="drop-looker" onclick="document.getElementById('f-looker').click()">
+      <span class="upload-icon">📈</span>
+      <h3>Looker Export</h3>
+      <p>سحبة الأداء من Looker<br>Excel أو CSV</p>
+      <div class="file-name" id="name-looker"></div>
+      <input type="file" id="f-looker" accept=".xlsx,.xls,.csv" onchange="loadFile(this,'looker')">
+    </div>
+    <div class="upload-card" id="drop-hc" onclick="document.getElementById('f-hc').click()">
+      <span class="upload-icon">👥</span>
+      <h3>Headcount</h3>
+      <p>ملف الأسامي وبيانات الطيارين<br>Excel أو CSV</p>
+      <div class="file-name" id="name-hc"></div>
+      <input type="file" id="f-hc" accept=".xlsx,.xls,.csv" onchange="loadFile(this,'hc')">
+    </div>
+  </div>
+
+  <button class="analyze-btn" id="abtn" onclick="runAnalysis()" disabled>
+    🔍 تحليل البيانات
+  </button>
+
+  <!-- Search -->
+  <div class="search-wrap" id="search-wrap">
+    <input type="text" id="search-in" placeholder="🔍 ابحث بـ Rider ID ..." oninput="doSearch(this.value)">
+    <div class="search-result" id="search-out"></div>
+  </div>
+
+  <!-- Results -->
+  <div class="results-wrap" id="results-wrap">
+    <div class="summary-bar" id="sum-bar"></div>
+    <div class="zone-tabs" id="z-tabs"></div>
+    <div id="z-sections"></div>
+  </div>
+
+</div>
+
+<script>
+const TOP = 25;
+let rawLooker = null, rawHC = null;
+let riderMap = {}, zoneData = {}, summaryData = {};
+
+// ── Flexible column finder ──────────────────────────────────────
+const LCOLS = {
+  id:       ['rider id','rider_id','courier id','courier_id','id'],
+  zone:     ['last operating zone','zone','operating zone','last_operating_zone'],
+  noshow:   ['total no show shifts','no show shifts','no_show_shifts','total no show','no show','noshow'],
+  breaks:   ['actual break time (h)','actual break time','break time','actual_break_time','break_time'],
+  late:     ['total late shifts','late shifts','late_shifts','total_late_shifts'],
+  workdays: ['total working days','working days','total_working_days'],
+  actwork:  ['actual working time','actual_working_time'],
+  avp:      ['avp %','avp%','avp'],
+};
+const HCOLS = {
+  id:     ['rider id','rider_id','courier id','courier_id','id','employee id','employee_id'],
+  name:   ['name','rider name','rider_name','employee name','employee_name','full name','full_name','courier name'],
+  office: ['3pl name','3pl','vendor name','vendor','office','branch','مكتب','فرع'],
+};
+
+function findCol(headers, keys) {
+  const h = headers.map(x => String(x||'').toLowerCase().trim());
+  for (const k of keys) {
+    const i = h.indexOf(k); if (i>=0) return i;
+  }
+  for (const k of keys) {
+    const i = h.findIndex(x => x.includes(k)); if (i>=0) return i;
+  }
+  return -1;
+}
+
+// ── File Loading ────────────────────────────────────────────────
+function readRows(file) {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = e => {
+      try {
+        const wb = XLSX.read(e.target.result, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        res(XLSX.utils.sheet_to_json(ws, { header:1, defval:'' }));
+      } catch(err) { rej(err); }
+    };
+    fr.readAsArrayBuffer(file);
+  });
+}
+
+async function loadFile(input, type) {
+  const file = input.files[0]; if (!file) return;
+  const rows = await readRows(file);
+  if (type === 'looker') {
+    rawLooker = rows;
+    document.getElementById('name-looker').textContent = '✅ ' + file.name;
+    document.getElementById('drop-looker').classList.add('loaded');
+  } else {
+    rawHC = rows;
+    document.getElementById('name-hc').textContent = '✅ ' + file.name;
+    document.getElementById('drop-hc').classList.add('loaded');
+  }
+  document.getElementById('abtn').disabled = !rawLooker;
+}
+
+// Drag & drop
+['drop-looker','drop-hc'].forEach(id => {
+  const el = document.getElementById(id);
+  const type = id.replace('drop-','');
+  el.ondragover = e => { e.preventDefault(); el.classList.add('drag-over'); };
+  el.ondragleave = () => el.classList.remove('drag-over');
+  el.ondrop = e => {
+    e.preventDefault(); el.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0]; if (!f) return;
+    const inp = document.getElementById('f-'+type);
+    const dt = new DataTransfer(); dt.items.add(f); inp.files = dt.files;
+    loadFile(inp, type);
+  };
+});
+
+// ── Analysis ────────────────────────────────────────────────────
+function runAnalysis() {
+  if (!rawLooker) return;
+
+  const hdrs = rawLooker[0];
+  const c = {};
+  for (const [k,v] of Object.entries(LCOLS)) c[k] = findCol(hdrs, v);
+
+  // Headcount map
+  const nameMap = {}, officeMap = {};
+  if (rawHC) {
+    const hh = rawHC[0];
+    const ci = findCol(hh, HCOLS.id), cn = findCol(hh, HCOLS.name), co = findCol(hh, HCOLS.office);
+    for (let i=1; i<rawHC.length; i++) {
+      const r = rawHC[i];
+      const id  = String(ci>=0 ? r[ci] : '').trim();
+      const nm  = String(cn>=0 ? r[cn] : '').trim();
+      const off = String(co>=0 ? r[co] : '').trim();
+      if (id) { nameMap[id] = nm; officeMap[id] = off; }
+    }
+  }
+
+  riderMap = {};
+  const zones = new Set();
+
+  for (let i=1; i<rawLooker.length; i++) {
+    const r = rawLooker[i];
+    const id = String(c.id>=0 ? r[c.id] : '').trim();
+    if (!id) continue;
+    const zone    = String(c.zone>=0 ? r[c.zone] : '').trim();
+    const noshow  = parseFloat(c.noshow>=0 ? r[c.noshow] : 0)||0;
+    const breaks  = parseFloat(c.breaks>=0 ? r[c.breaks] : 0)||0;
+    const late    = parseFloat(c.late>=0   ? r[c.late]   : 0)||0;
+    const workdays= parseFloat(c.workdays>=0? r[c.workdays]:0)||0;
+    const actwork = parseFloat(c.actwork>=0 ? r[c.actwork]:0)||0;
+    const avpRaw  = c.avp>=0 ? String(r[c.avp]||'') : '';
+    const avpNum  = parseFloat(avpRaw.replace('%',''))||0;
+    riderMap[id]  = { id, zone, noshow, breaks, late, workdays, actwork, avp: avpRaw, avpNum, name: nameMap[id]||'', office: officeMap[id]||'' };
+    if (zone) zones.add(zone);
+  }
+
+  zoneData = {}; summaryData = {};
+  for (const z of zones) {
+    const riders = Object.values(riderMap).filter(r => r.zone===z);
+    zoneData[z] = {
+      noshow: riders.filter(r=>r.noshow>0).sort((a,b)=>b.noshow-a.noshow).slice(0,TOP),
+      breaks: [...riders].sort((a,b)=>b.breaks-a.breaks).slice(0,TOP),
+      late:   riders.filter(r=>r.late>0).sort((a,b)=>b.late-a.late).slice(0,TOP),
+    };
+  }
+
+  render(zones);
+}
+
+// ── Render ───────────────────────────────────────────────────────
+function render(zones) {
+  const all = Object.values(riderMap);
+  const nsTotal = all.filter(r=>r.noshow>0).length;
+  const ltTotal = all.filter(r=>r.late>0).length;
+  const avgBrk  = all.length ? (all.reduce((s,r)=>s+r.breaks,0)/all.length).toFixed(1) : '0';
+
+  document.getElementById('sum-bar').innerHTML = `
+    <div class="sum-card"><div class="n">${all.length}</div><div class="l">إجمالي الطيارين</div></div>
+    <div class="sum-card"><div class="n" style="color:#c62828">${nsTotal}</div><div class="l">فيهم No Shows</div></div>
+    <div class="sum-card"><div class="n" style="color:#e65100">${ltTotal}</div><div class="l">فيهم Late Logins</div></div>
+    <div class="sum-card"><div class="n" style="color:#f57f17">${avgBrk}h</div><div class="l">Avg Break Time</div></div>
+  `;
+
+  const zList = [...zones].sort();
+  const tabsEl = document.getElementById('z-tabs');
+  const secsEl = document.getElementById('z-sections');
+  tabsEl.innerHTML = ''; secsEl.innerHTML = '';
+
+  zList.forEach((z, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'zone-tab' + (i===0?' active':'');
+    btn.textContent = z;
+    btn.onclick = () => {
+      tabsEl.querySelectorAll('.zone-tab').forEach(t=>t.classList.remove('active'));
+      secsEl.querySelectorAll('.zone-section').forEach(s=>s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('zs'+i).classList.add('active');
+    };
+    tabsEl.appendChild(btn);
+
+    const sec = document.createElement('div');
+    sec.className = 'zone-section'+(i===0?' active':'');
+    sec.id = 'zs'+i;
+    sec.innerHTML = buildZone(z, zoneData[z]);
+    secsEl.appendChild(sec);
+  });
+
+  // Offices tab
+  const offBtn = document.createElement('button');
+  offBtn.className = 'zone-tab';
+  offBtn.style.cssText = 'background:#e8f5e9;color:#2e7d32';
+  offBtn.textContent = '🏢 المكاتب';
+  offBtn.onclick = () => {
+    tabsEl.querySelectorAll('.zone-tab').forEach(t=>t.classList.remove('active'));
+    secsEl.querySelectorAll('.zone-section').forEach(s=>s.classList.remove('active'));
+    offBtn.classList.add('active');
+    document.getElementById('offices-sec').classList.add('active');
+    renderOffices();
+  };
+  tabsEl.appendChild(offBtn);
+
+  const offSec = document.createElement('div');
+  offSec.className = 'zone-section';
+  offSec.id = 'offices-sec';
+  offSec.innerHTML = `<div style="background:white;border-radius:13px;padding:22px;box-shadow:0 2px 10px rgba(0,0,0,0.09)">
+    <h3 style="font-size:16px;font-weight:800;margin-bottom:14px;color:#333">🏢 عرض حسب المكتب (3PL)</h3>
+    <div id="office-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px"></div>
+    <div id="office-content"><p style="text-align:center;color:#aaa;padding:24px;font-size:14px">اختر مكتب من فوق</p></div>
+  </div>`;
+  secsEl.appendChild(offSec);
+
+  // Summary tab
+  const sumBtn = document.createElement('button');
+  sumBtn.className = 'zone-tab';
+  sumBtn.style.cssText = 'background:#f3e5f5;color:#6a1b9a;display:flex;align-items:center;gap:6px';
+  sumBtn.innerHTML = '📊 ملخص <span id="sum-badge" style="background:#6a1b9a;color:white;padding:1px 8px;border-radius:10px;font-size:11px;display:none"></span>';
+  sumBtn.onclick = () => {
+    tabsEl.querySelectorAll('.zone-tab').forEach(t=>t.classList.remove('active'));
+    secsEl.querySelectorAll('.zone-section').forEach(s=>s.classList.remove('active'));
+    sumBtn.classList.add('active');
+    document.getElementById('summary-sec').classList.add('active');
+  };
+  tabsEl.appendChild(sumBtn);
+
+  const sumSec = document.createElement('div');
+  sumSec.className = 'zone-section';
+  sumSec.id = 'summary-sec';
+  sumSec.innerHTML = `<div style="background:white;border-radius:13px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.09);padding:22px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:16px;color:#333;font-weight:800">📋 ملخص ما تم نسخه</h3>
+      <button onclick="summaryData={};renderSummary()" style="font-size:12px;color:#888;background:none;border:1px solid #ddd;border-radius:7px;padding:4px 12px;cursor:pointer">🗑 مسح</button>
+    </div>
+    <div id="summary-content"><p style="text-align:center;color:#aaa;padding:30px;font-size:14px">اضغط Copy IDs أو Copy Names في أي قسم وهيظهر هنا</p></div>
+  </div>`;
+  secsEl.appendChild(sumSec);
+
+  document.getElementById('results-wrap').style.display = 'block';
+  document.getElementById('search-wrap').style.display = 'block';
+}
+
+function buildZone(zone, d) {
+  return `<div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">
+    ${buildMetric(zone,'noshow','mh-noshow','🚫 No Shows','noshow','val-red','مرة', d.noshow)}
+    ${buildMetric(zone,'breaks','mh-breaks','☕ أعلى Break Time','breaks','val-orange','h', d.breaks)}
+    ${buildMetric(zone,'late','mh-late','⏰ Late Logins','late','val-yellow','مرة', d.late)}
+  </div>`;
+}
+
+let _mid = 0;
+function buildMetric(zone, key, cls, title, field, vcls, unit, riders, isAvp) {
+  const mid = 'mt'+(_mid++);
+  const fmt = r => isAvp ? r.avpNum.toFixed(0) : field==='breaks' ? r[field].toFixed(1) : r[field];
+  const rows = riders.length ? riders.map((r,i)=>`
+    <tr>
+      <td class="td-rank">${i+1}</td>
+      <td class="td-id">${r.id}</td>
+      <td class="td-name">${r.name||'—'}</td>
+      <td class="td-val ${vcls}">${fmt(r)} ${unit}</td>
+    </tr>`).join('') :
+    `<tr><td colspan="4" class="no-data">لا توجد بيانات</td></tr>`;
+
+  const ds = JSON.stringify(riders.map(r=>({id:r.id,name:r.name,val:fmt(r),unit})));
+
+  return `<div class="metric-card">
+    <div class="metric-hdr ${cls}">
+      <h3>${title}</h3>
+      <span class="badge">${riders.length} طيار</span>
+    </div>
+    <div class="copy-row">
+      <span style="font-size:12px;color:#888;align-self:center">أول</span>
+      <input type="number" id="n-${mid}" min="1" max="${TOP}" value="${TOP}" style="width:52px;padding:4px 6px;border:1.5px solid #ddd;border-radius:7px;font-size:13px;text-align:center;outline:none">
+      <span style="font-size:12px;color:#888;align-self:center">طيار</span>
+      <button class="cbtn" onclick="cp('${mid}','ids',event)">📋 Copy IDs</button>
+      <button class="cbtn" onclick="cp('${mid}','names',event)">👤 Copy Names</button>
+    </div>
+    <div class="tbl-wrap">
+      <table class="mtbl" id="${mid}" data-d='${ds.replace(/'/g,"&#39;")}' data-zone="${zone}" data-metric="${key}">
+        <thead><tr><th>#</th><th>Rider ID</th><th>الاسم</th><th>القيمة</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function cp(mid, mode, e) {
+  const tbl = document.getElementById(mid);
+  const nInp = document.getElementById('n-'+mid);
+  const n = nInp ? Math.max(1, parseInt(nInp.value)||TOP) : TOP;
+  const all = JSON.parse(tbl.dataset.d.replace(/&#39;/g,"'"));
+  const data = all.slice(0, n);
+  let text;
+  if (mode === 'ids')   text = data.map(r=>r.id).join('\n');
+  if (mode === 'names') text = data.map(r=>r.name||r.id).join('\n');
+
+  // Track in summary
+  const zone = tbl.dataset.zone;
+  const metric = tbl.dataset.metric;
+  if (zone && metric) {
+    if (!summaryData[zone]) summaryData[zone] = {};
+    summaryData[zone][metric] = n;
+    renderSummary();
+  }
+
+  navigator.clipboard.writeText(text).then(()=>{
+    const btn = e.target;
+    const orig = btn.textContent;
+    btn.textContent='✅ Copied!'; btn.classList.add('ok');
+    setTimeout(()=>{ btn.textContent=orig; btn.classList.remove('ok'); },1800);
+  });
+}
+
+function renderSummary() {
+  const el = document.getElementById('summary-content');
+  if (!el) return;
+  const zones = Object.keys(summaryData).sort();
+  if (!zones.length) {
+    el.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px">لم تقم بأي Copy بعد</p>';
+    return;
+  }
+  const totals = { noshow:0, breaks:0, late:0, grand:0 };
+  const rows = zones.map(z => {
+    const d = summaryData[z]||{};
+    const ns=d.noshow||0, br=d.breaks||0, lt=d.late||0;
+    const grand=ns+br+lt;
+    totals.noshow+=ns; totals.breaks+=br; totals.late+=lt; totals.grand+=grand;
+    return `<tr>
+      <td style="font-weight:700;padding:7px 14px;text-align:right;border:1px solid #d0d5dd">${z}</td>
+      <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd;color:${br?'#e65100':'#bbb'};font-weight:${br?'800':'400'}">${br||'—'}</td>
+      <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd;color:${lt?'#f57f17':'#bbb'};font-weight:${lt?'800':'400'}">${lt||'—'}</td>
+      <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd;color:${ns?'#c62828':'#bbb'};font-weight:${ns?'800':'400'}">${ns||'—'}</td>
+      <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd;font-weight:900;color:#333">${grand}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table style="border-collapse:collapse;font-size:13px;border:1.5px solid #d0d5dd;border-radius:8px;overflow:hidden">
+    <thead>
+      <tr style="background:#f5f6f8;font-weight:700;color:#555">
+        <th style="padding:7px 14px;text-align:right;border:1px solid #d0d5dd">Rider Zone</th>
+        <th style="padding:7px 14px;text-align:center;border:1px solid #d0d5dd;color:#e65100">Breaks</th>
+        <th style="padding:7px 14px;text-align:center;border:1px solid #d0d5dd;color:#f57f17">Late Login</th>
+        <th style="padding:7px 14px;text-align:center;border:1px solid #d0d5dd;color:#c62828">No Show</th>
+        <th style="padding:7px 14px;text-align:center;border:1px solid #d0d5dd;color:#333">Grand Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+      <tr style="background:#f0f4f8;font-weight:900;border-top:2px solid #b0b8c4">
+        <td style="padding:7px 14px;text-align:right;border:1px solid #d0d5dd">Grand Total</td>
+        <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd">${totals.breaks||'—'}</td>
+        <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd">${totals.late||'—'}</td>
+        <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd">${totals.noshow||'—'}</td>
+        <td style="text-align:center;padding:7px 14px;border:1px solid #d0d5dd">${totals.grand||'—'}</td>
+      </tr>
+    </tbody>
+  </table>`;
+  const badge = document.getElementById('sum-badge');
+  if (badge) { badge.textContent = zones.length; badge.style.display=''; }
+}
+
+// ── Offices ──────────────────────────────────────────────────────
+function getSelectedRiders() {
+  const selected = {};
+  for (const zone in summaryData) {
+    for (const metric in summaryData[zone]) {
+      const n = summaryData[zone][metric];
+      if (!zoneData[zone] || !zoneData[zone][metric]) continue;
+      const riders = zoneData[zone][metric].slice(0, n);
+      for (const r of riders) {
+        if (!selected[r.id]) selected[r.id] = { ...r, appearances: {} };
+        if (!selected[r.id].appearances[zone]) selected[r.id].appearances[zone] = [];
+        selected[r.id].appearances[zone].push(metric);
+      }
+    }
+  }
+  return selected;
+}
+
+function renderOffices() {
+  const btnsEl = document.getElementById('office-btns');
+  const contentEl = document.getElementById('office-content');
+  if (!btnsEl || !contentEl) return;
+  const selected = getSelectedRiders();
+  if (!Object.keys(selected).length) {
+    btnsEl.innerHTML = '';
+    contentEl.innerHTML = '<p style="text-align:center;color:#aaa;padding:24px;font-size:14px">اعمل Copy في الزونات الأول عشان يظهر البيانات هنا</p>';
+    return;
+  }
+  const offices = new Set();
+  for (const id in selected) {
+    const off = selected[id].office;
+    if (off) offices.add(off);
+  }
+  if (!offices.size) {
+    contentEl.innerHTML = '<p style="text-align:center;color:#aaa;padding:24px;font-size:14px">مفيش عمود 3PL Name في ملف الهيدكاونت — تأكد من رفع الملف الصح</p>';
+    return;
+  }
+  const sorted = [...offices].sort();
+  btnsEl.innerHTML = sorted.map(o =>
+    `<button onclick="showOffice(this,'${o.replace(/'/g,"&#39;")}')"
+     style="padding:7px 16px;border:2px solid #ddd;border-radius:9px;background:white;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.15s;color:#555"
+     onmouseover="this.style.borderColor='#43a047';this.style.color='#2e7d32'"
+     onmouseout="if(!this.classList.contains('sel')){this.style.borderColor='#ddd';this.style.color='#555'}">${o}</button>`
+  ).join('');
+}
+
+function showOffice(btn, office) {
+  document.querySelectorAll('#office-btns button').forEach(b => {
+    b.classList.remove('sel');
+    b.style.background='white'; b.style.borderColor='#ddd'; b.style.color='#555';
+  });
+  btn.classList.add('sel');
+  btn.style.background='#e8f5e9'; btn.style.borderColor='#43a047'; btn.style.color='#2e7d32';
+
+  const contentEl = document.getElementById('office-content');
+  const selected = getSelectedRiders();
+  const metricLabel = { noshow:'🚫 No Show', breaks:'☕ Breaks', late:'⏰ Late Login' };
+  const metricColor = { noshow:'#c62828', breaks:'#e65100', late:'#f57f17' };
+
+  const byZone = {};
+  for (const id in selected) {
+    const r = selected[id];
+    if ((r.office||'') !== office) continue;
+    for (const zone in r.appearances) {
+      if (!byZone[zone]) byZone[zone] = [];
+      byZone[zone].push({ ...r, metrics: r.appearances[zone] });
+    }
+  }
+  const zones = Object.keys(byZone).sort();
+  if (!zones.length) {
+    contentEl.innerHTML = '<p style="text-align:center;color:#aaa;padding:24px;font-size:14px">مفيش أفندرز من المكتب دا في الملخص</p>';
+    return;
+  }
+  const total = zones.reduce((s,z)=>s+byZone[z].length,0);
+  let html = `<div style="font-size:13px;color:#888;margin-bottom:14px;font-weight:600">${total} طيار من مكتب <span style="color:#2e7d32">${office}</span> في ${zones.length} زون</div>`;
+  for (const zone of zones) {
+    const riders = byZone[zone];
+    html += `<div style="margin-bottom:18px">
+      <div style="font-weight:800;font-size:13px;color:#1a73e8;margin-bottom:8px;padding:6px 12px;background:#e8f0fe;border-radius:7px;display:inline-block">📍 ${zone} — ${riders.length} طيار</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:#f5f6f8;color:#555;font-weight:700">
+          <th style="padding:6px 10px;text-align:center;border:1px solid #e0e0e0">#</th>
+          <th style="padding:6px 10px;text-align:right;border:1px solid #e0e0e0">Rider ID</th>
+          <th style="padding:6px 10px;text-align:right;border:1px solid #e0e0e0">الاسم</th>
+          <th style="padding:6px 10px;text-align:center;border:1px solid #e0e0e0">المخالفات</th>
+        </tr></thead>
+        <tbody>${riders.map((r,i)=>{
+          const multi = r.metrics.length > 1;
+          const rowBg = multi ? 'background:#fff8e1;' : '';
+          return `<tr style="${rowBg}">
+          <td style="padding:6px 10px;border:1px solid #e0e0e0;text-align:center;color:#999;font-size:12px">${i+1}</td>
+          <td style="padding:6px 10px;border:1px solid #e0e0e0;font-family:monospace;color:#1565c0;font-weight:700">${r.id}${multi?` <span title="متكرر في أكتر من حاجة" style="color:#f57f17;font-size:14px;font-family:sans-serif">⚠️</span>`:''}</td>
+          <td style="padding:6px 10px;border:1px solid #e0e0e0;color:#333;font-weight:${multi?'700':'400'}">${r.name||'—'}</td>
+          <td style="padding:6px 10px;border:1px solid #e0e0e0;text-align:center">
+            ${r.metrics.map(m=>`<span style="font-size:11px;font-weight:700;color:${metricColor[m]};background:${metricColor[m]}1a;padding:2px 8px;border-radius:5px;margin:1px;display:inline-block">${metricLabel[m]}</span>`).join('')}
+          </td>
+        </tr>`;}).join('')}</tbody>
+      </table>
+    </div>`;
+  }
+  contentEl.innerHTML = html;
+}
+
+// ── Search ───────────────────────────────────────────────────────
+function doSearch(val) {
+  const id = val.trim();
+  const out = document.getElementById('search-out');
+  if (!id || !riderMap[id]) { out.style.display='none'; return; }
+  const r = riderMap[id];
+  out.style.display = 'block';
+  out.innerHTML = `<div class="rider-card">
+    <div class="rider-card-top">
+      <div><div class="rc-num" style="color:#1565c0">${r.id}</div><div class="rc-label">Rider ID</div></div>
+      <div><div class="rc-num" style="font-size:17px">${r.name||'—'}</div><div class="rc-label">الاسم</div></div>
+      <div><div class="rc-num" style="font-size:17px">${r.zone}</div><div class="rc-label">Zone</div></div>
+      <div><div class="rc-num" style="font-size:17px">${r.avp||'—'}</div><div class="rc-label">AVP %</div></div>
+    </div>
+    <hr style="border:none;border-top:1px solid #e0e0e0;margin-bottom:12px">
+    <div class="rider-card-metrics" style="grid-template-columns:repeat(4,1fr)">
+      <div class="rc-metric" style="background:#fce8e6">
+        <div class="rc-num val-red">${r.noshow}</div><div class="rc-label">No Shows</div>
+      </div>
+      <div class="rc-metric" style="background:#fff3e0">
+        <div class="rc-num val-orange">${r.breaks.toFixed(1)}h</div><div class="rc-label">Break Time</div>
+      </div>
+      <div class="rc-metric" style="background:#fffde7">
+        <div class="rc-num val-yellow">${r.late}</div><div class="rc-label">Late Logins</div>
+      </div>
+      <div class="rc-metric" style="background:#f3e5f5">
+        <div class="rc-num val-purple">${r.avpNum.toFixed(0)}%</div><div class="rc-label">AVP %</div>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;color:#999;text-align:center">
+      أيام عمل: ${r.workdays} &nbsp;|&nbsp; ساعات فعلية: ${r.actwork}h
+    </div>
+  </div>`;
+}
+</script>
+</body>
+</html>
