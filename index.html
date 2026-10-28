@@ -32,7 +32,13 @@ body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; background: #f0f2f5; 
 .container { max-width: 1500px; margin: 0 auto; padding: 22px 20px; }
 
 /* ── Upload ── */
-.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+.vc-pill { display:inline-block; padding:2px 9px; border-radius:20px; font-size:11px; font-weight:700; white-space:nowrap; }
+.vc-new    { background:#e8f5e9; color:#2e7d32; }
+.vc-2nd    { background:#fff3e0; color:#bf360c; }
+.vc-3rd    { background:#fbe9e7; color:#bf360c; }
+.vc-4th    { background:#ffebee; color:#b71c1c; }
+.vc-max    { background:#fce4ec; color:#880e4f; }
 
 .upload-card {
   background: white;
@@ -218,7 +224,50 @@ input[type=file] { display: none; }
       <div class="file-name" id="name-hc"></div>
       <input type="file" id="f-hc" accept=".xlsx,.xls,.csv" onchange="loadFile(this,'hc')">
     </div>
+    <div class="upload-card" id="drop-hist" onclick="document.getElementById('f-hist').click()">
+      <span class="upload-icon">📋</span>
+      <h3>History Sheet</h3>
+      <p>سجل المخالفات السابقة<br>Excel أو CSV (اختياري)</p>
+      <div class="file-name" id="name-hist"></div>
+      <input type="file" id="f-hist" accept=".xlsx,.xls,.csv" onchange="loadFile(this,'hist')">
+    </div>
   </div>
+
+  <details style="background:white;border-radius:12px;padding:14px 20px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,0.06);cursor:pointer">
+    <summary style="font-size:14px;font-weight:700;color:#555;list-style:none;display:flex;align-items:center;gap:8px">
+      <span>📖</span> كيفية الاستخدام — اضغط هنا
+    </summary>
+    <div style="margin-top:14px;font-size:13.5px;line-height:2;color:#333;direction:rtl">
+      <p style="font-weight:800;color:#e53935;margin-bottom:6px">الملفات المطلوبة:</p>
+      <ol style="padding-right:20px;margin-bottom:14px">
+        <li><b>Looker Export</b> — سحبة الأداء من Looker (Excel أو CSV) — <span style="color:#c62828">مطلوب</span></li>
+        <li><b>Headcount</b> — ملف الأسامي والـ 3PL (Excel أو CSV) — اختياري</li>
+        <li><b>History Sheet</b> — شيت <b>The Watchers on the Logistics</b> — اختياري</li>
+      </ol>
+      <p style="font-weight:800;color:#1565c0;margin-bottom:6px">📥 إزاي تنزّل History Sheet:</p>
+      <ol style="padding-right:20px;margin-bottom:14px">
+        <li>افتح شيت <b>The Watchers on the Logistics</b> على Google Sheets</li>
+        <li>من القائمة العليا: <b>File → Download → Microsoft Excel (.xlsx)</b></li>
+        <li>ارفع الملف في الكارد التالت <b>History Sheet</b> في التول</li>
+      </ol>
+      <p style="font-weight:800;color:#2e7d32;margin-bottom:6px">✅ الخطوات:</p>
+      <ol style="padding-right:20px">
+        <li>ارفع الملفات في الكروت المناسبة</li>
+        <li>اضغط <b>تحليل البيانات</b></li>
+        <li>اختار الزون اللي عايزه من التابز</li>
+        <li>لما تعوز تاخد قائمة — اضغط <b>Copy IDs</b> أو <b>Copy Names</b></li>
+        <li>لو رفعت History Sheet — كولوم <b>Violation Counter</b> هيبان تلقائي وبيوضح التوصية</li>
+      </ol>
+      <div style="margin-top:12px;padding:10px 14px;background:#fff3e0;border-radius:9px;border-right:4px solid #ff9800">
+        <b style="color:#e65100">نظام التوصيات:</b><br>
+        🟢 أول مرة = إيقاف 2 يوم &nbsp;|&nbsp;
+        🟡 المرة 2 = 3 أيام &nbsp;|&nbsp;
+        🟠 المرة 3 = 5 أيام &nbsp;|&nbsp;
+        🔴 المرة 4 = 7 أيام &nbsp;|&nbsp;
+        ⛔ المرة 5+ = 30 يوم
+      </div>
+    </div>
+  </details>
 
   <button class="analyze-btn" id="abtn" onclick="runAnalysis()" disabled>
     🔍 تحليل البيانات
@@ -241,8 +290,13 @@ input[type=file] { display: none; }
 
 <script>
 const TOP = 25;
-let rawLooker = null, rawHC = null;
-let riderMap = {}, zoneData = {}, summaryData = {};
+let rawLooker = null, rawHC = null, rawHistory = null;
+let riderMap = {}, zoneData = {}, summaryData = {}, historyMap = {};
+
+const HISCOLS = {
+  id:      ['rider id','rider_id','courier id','courier_id','id'],
+  counter: ['violation counter','violations counter','counter','عدد المرات','مرات'],
+};
 
 // ── Flexible column finder ──────────────────────────────────────
 const LCOLS = {
@@ -294,16 +348,20 @@ async function loadFile(input, type) {
     rawLooker = rows;
     document.getElementById('name-looker').textContent = '✅ ' + file.name;
     document.getElementById('drop-looker').classList.add('loaded');
-  } else {
+  } else if (type === 'hc') {
     rawHC = rows;
     document.getElementById('name-hc').textContent = '✅ ' + file.name;
     document.getElementById('drop-hc').classList.add('loaded');
+  } else {
+    rawHistory = rows;
+    document.getElementById('name-hist').textContent = '✅ ' + file.name;
+    document.getElementById('drop-hist').classList.add('loaded');
   }
   document.getElementById('abtn').disabled = !rawLooker;
 }
 
 // Drag & drop
-['drop-looker','drop-hc'].forEach(id => {
+['drop-looker','drop-hc','drop-hist'].forEach(id => {
   const el = document.getElementById(id);
   const type = id.replace('drop-','');
   el.ondragover = e => { e.preventDefault(); el.classList.add('drag-over'); };
@@ -336,6 +394,19 @@ function runAnalysis() {
       const nm  = String(cn>=0 ? r[cn] : '').trim();
       const off = String(co>=0 ? r[co] : '').trim();
       if (id) { nameMap[id] = nm; officeMap[id] = off; }
+    }
+  }
+
+  // History map
+  historyMap = {};
+  if (rawHistory) {
+    const hh = rawHistory[0];
+    const hi = findCol(hh, HISCOLS.id), hc = findCol(hh, HISCOLS.counter);
+    for (let i=1; i<rawHistory.length; i++) {
+      const r = rawHistory[i];
+      const id  = String(hi>=0 ? r[hi] : '').trim();
+      const cnt = parseInt(hc>=0 ? r[hc] : 0)||0;
+      if (id) historyMap[id] = cnt;
     }
   }
 
@@ -458,30 +529,92 @@ function render(zones) {
   </div>`;
   secsEl.appendChild(sumSec);
 
+  // Watchers tab
+  const watBtn = document.createElement('button');
+  watBtn.className = 'zone-tab';
+  watBtn.style.cssText = 'background:#e3f2fd;color:#1565c0;display:flex;align-items:center;gap:6px';
+  watBtn.innerHTML = '👁 واتشرز <span id="wat-badge" style="background:#1565c0;color:white;padding:1px 8px;border-radius:10px;font-size:11px;display:none"></span>';
+  watBtn.onclick = () => {
+    tabsEl.querySelectorAll('.zone-tab').forEach(t=>t.classList.remove('active'));
+    secsEl.querySelectorAll('.zone-section').forEach(s=>s.classList.remove('active'));
+    watBtn.classList.add('active');
+    document.getElementById('watchers-sec').classList.add('active');
+    renderWatchers();
+  };
+  tabsEl.appendChild(watBtn);
+
+  const watSec = document.createElement('div');
+  watSec.className = 'zone-section';
+  watSec.id = 'watchers-sec';
+  watSec.innerHTML = `<div style="background:white;border-radius:13px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,0.09);padding:22px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
+      <h3 style="font-size:16px;color:#333;font-weight:800">👁 The Watchers — بيانات جاهزة للرفع</h3>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:7px">
+          <label style="font-size:13px;font-weight:700;color:#555">Case Owner:</label>
+          <select id="watcher-owner" onchange="renderWatchers()"
+            style="padding:6px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:13px;font-family:inherit;outline:none;cursor:pointer">
+            <option value="">— اختر اسمك —</option>
+            <option value="Younis">Younis</option>
+            <option value="Othman">Othman</option>
+            <option value="Amir">Amir</option>
+            <option value="Ibrahim">Ibrahim</option>
+          </select>
+        </div>
+        <button id="copy-watchers-btn" onclick="copyWatchers()"
+          style="padding:7px 16px;background:#1565c0;color:white;border:none;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:all 0.15s">
+          📋 Copy All للشيت
+        </button>
+      </div>
+    </div>
+    <div id="watchers-content"><p style="text-align:center;color:#aaa;padding:30px;font-size:14px">اعمل Copy في الزونات الأول وهتظهر البيانات هنا</p></div>
+  </div>`;
+  secsEl.appendChild(watSec);
+
   document.getElementById('results-wrap').style.display = 'block';
   document.getElementById('search-wrap').style.display = 'block';
 }
 
 function buildZone(zone, d) {
+  // Find riders appearing in more than one metric
+  const counter = {};
+  ['noshow','breaks','late'].forEach(m => {
+    (d[m]||[]).forEach(r => { counter[r.id] = (counter[r.id]||0) + 1; });
+  });
+  const multiIds = new Set(Object.keys(counter).filter(id => counter[id] > 1));
+
   return `<div class="metric-grid" style="grid-template-columns:repeat(3,1fr)">
-    ${buildMetric(zone,'noshow','mh-noshow','🚫 No Shows','noshow','val-red','مرة', d.noshow)}
-    ${buildMetric(zone,'breaks','mh-breaks','☕ أعلى Break Time','breaks','val-orange','h', d.breaks)}
-    ${buildMetric(zone,'late','mh-late','⏰ Late Logins','late','val-yellow','مرة', d.late)}
+    ${buildMetric(zone,'noshow','mh-noshow','🚫 No Shows','noshow','val-red','مرة', d.noshow, false, multiIds)}
+    ${buildMetric(zone,'breaks','mh-breaks','☕ أعلى Break Time','breaks','val-orange','h', d.breaks, false, multiIds)}
+    ${buildMetric(zone,'late','mh-late','⏰ Late Logins','late','val-yellow','مرة', d.late, false, multiIds)}
   </div>`;
 }
 
+function vcPill(id) {
+  if (!rawHistory) return '';
+  const cnt = historyMap.hasOwnProperty(id) ? historyMap[id] : null;
+  if (cnt === null) return `<span class="vc-pill vc-new">أول مرة — 2 يوم</span>`;
+  if (cnt === 1)    return `<span class="vc-pill vc-2nd">المرة 2 — 3 أيام</span>`;
+  if (cnt === 2)    return `<span class="vc-pill vc-3rd">المرة 3 — 5 أيام</span>`;
+  if (cnt === 3)    return `<span class="vc-pill vc-4th">المرة 4 — 7 أيام</span>`;
+  return `<span class="vc-pill vc-max">5th+ — 30 يوم</span>`;
+}
+
 let _mid = 0;
-function buildMetric(zone, key, cls, title, field, vcls, unit, riders, isAvp) {
+function buildMetric(zone, key, cls, title, field, vcls, unit, riders, isAvp, multiIds) {
   const mid = 'mt'+(_mid++);
   const fmt = r => isAvp ? r.avpNum.toFixed(0) : field==='breaks' ? r[field].toFixed(1) : r[field];
-  const rows = riders.length ? riders.map((r,i)=>`
-    <tr>
+  const rows = riders.length ? riders.map((r,i)=>{
+    const multi = multiIds && multiIds.has(r.id);
+    const vc = vcPill(r.id);
+    return `<tr style="${multi?'background:#fff0f0;':''}">
       <td class="td-rank">${i+1}</td>
-      <td class="td-id">${r.id}</td>
-      <td class="td-name">${r.name||'—'}</td>
+      <td class="td-id">${r.id}${multi?' <span style="color:#c62828;font-size:12px">⚠️</span>':''}</td>
+      <td class="td-name" style="font-weight:${multi?'700':'400'}">${r.name||'—'}</td>
       <td class="td-val ${vcls}">${fmt(r)} ${unit}</td>
-    </tr>`).join('') :
-    `<tr><td colspan="4" class="no-data">لا توجد بيانات</td></tr>`;
+      ${rawHistory ? `<td style="text-align:center">${vc}</td>` : ''}
+    </tr>`;}).join('') :
+    `<tr><td colspan="${rawHistory?5:4}" class="no-data">لا توجد بيانات</td></tr>`;
 
   const ds = JSON.stringify(riders.map(r=>({id:r.id,name:r.name,val:fmt(r),unit})));
 
@@ -499,7 +632,7 @@ function buildMetric(zone, key, cls, title, field, vcls, unit, riders, isAvp) {
     </div>
     <div class="tbl-wrap">
       <table class="mtbl" id="${mid}" data-d='${ds.replace(/'/g,"&#39;")}' data-zone="${zone}" data-metric="${key}">
-        <thead><tr><th>#</th><th>Rider ID</th><th>الاسم</th><th>القيمة</th></tr></thead>
+        <thead><tr><th>#</th><th>Rider ID</th><th>الاسم</th><th>القيمة</th>${rawHistory?'<th>Violation Counter</th>':''}</tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
@@ -578,6 +711,9 @@ function renderSummary() {
   </table>`;
   const badge = document.getElementById('sum-badge');
   if (badge) { badge.textContent = zones.length; badge.style.display=''; }
+  // refresh watchers badge
+  const wb = document.getElementById('wat-badge');
+  if (wb) { const n = buildWatcherRows().length; wb.textContent=n; wb.style.display=n?'':'none'; }
 }
 
 // ── Offices ──────────────────────────────────────────────────────
@@ -683,6 +819,92 @@ function showOffice(btn, office) {
   contentEl.innerHTML = html;
 }
 
+// ── Watchers ─────────────────────────────────────────────────────
+function getAction(newCnt) {
+  if (newCnt <= 1) return '2 Day Suspension + Coaching';
+  if (newCnt === 2) return '3 Days Suspension + Coaching';
+  if (newCnt === 3) return '5 Days Suspension + Coaching';
+  if (newCnt === 4) return '7 Days Suspension + Coaching';
+  return '30 Days Suspension + Coaching';
+}
+
+function buildWatcherRows() {
+  const today = new Date();
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const dateStr = today.getDate() + ' ' + months[today.getMonth()];
+  const metricLabel = { noshow: 'No Show', breaks: 'Breaks', late: 'Late Login' };
+  const caseOwner = document.getElementById('watcher-owner')?.value || '';
+  const rows = [];
+  for (const zone in summaryData) {
+    for (const metric in summaryData[zone]) {
+      const n = summaryData[zone][metric];
+      if (!zoneData[zone] || !zoneData[zone][metric]) continue;
+      for (const r of zoneData[zone][metric].slice(0, n)) {
+        const prevCnt = historyMap.hasOwnProperty(r.id) ? historyMap[r.id] : null;
+        const newCnt = prevCnt === null ? 1 : prevCnt + 1;
+        rows.push({ date: dateStr, id: r.id, name: r.name||'', tpl: r.office||'', zone: r.zone,
+          violation: metricLabel[metric], caseOwner, counter: newCnt, action: getAction(newCnt) });
+      }
+    }
+  }
+  return rows;
+}
+
+function renderWatchers() {
+  const el = document.getElementById('watchers-content');
+  if (!el) return;
+  const rows = buildWatcherRows();
+  if (!rows.length) {
+    el.innerHTML = '<p style="text-align:center;color:#aaa;padding:30px;font-size:14px">اعمل Copy في الزونات الأول وهتظهر البيانات هنا</p>';
+    return;
+  }
+  const vColor = {'No Show':'#c62828','Breaks':'#e65100','Late Login':'#7b1fa2'};
+  const vBg    = {'No Show':'#ffebee','Breaks':'#fff3e0','Late Login':'#f3e5f5'};
+  let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px;min-width:900px">
+    <thead><tr style="background:#f5f6f8;font-weight:700;color:#555">
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;white-space:nowrap">Date</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;white-space:nowrap">Rider ID</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;white-space:nowrap">Rider Name</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;white-space:nowrap">Rider 3PL</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;white-space:nowrap">Rider Zone</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;text-align:center;white-space:nowrap">Violation Type</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;text-align:center;white-space:nowrap">Case Owner</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;text-align:center;white-space:nowrap">Violation Counter</th>
+      <th style="padding:7px 10px;border:1px solid #e0e0e0;white-space:nowrap">Action</th>
+    </tr></thead><tbody>`;
+  for (const r of rows) {
+    html += `<tr>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;white-space:nowrap">${r.date}</td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;font-family:monospace;color:#1565c0;font-weight:700">${r.id}</td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0">${r.name}</td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0">${r.tpl}</td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0">${r.zone}</td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;text-align:center">
+        <span style="background:${vBg[r.violation]||'#f5f5f5'};color:${vColor[r.violation]||'#333'};padding:2px 9px;border-radius:5px;font-weight:700;font-size:11px">${r.violation}</span>
+      </td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;text-align:center;font-weight:700;color:#1565c0">${r.caseOwner||'—'}</td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0;text-align:center;font-weight:800;color:#e65100">${r.counter}</td>
+      <td style="padding:6px 10px;border:1px solid #e0e0e0">${r.action}</td>
+    </tr>`;
+  }
+  html += '</tbody></table></div>';
+  el.innerHTML = html;
+  const badge = document.getElementById('wat-badge');
+  if (badge) { badge.textContent = rows.length; badge.style.display = ''; }
+}
+
+function copyWatchers() {
+  const rows = buildWatcherRows();
+  if (!rows.length) return;
+  const tsv = rows.map(r => [r.date, r.id, r.name, r.tpl, r.zone, r.violation, r.caseOwner, r.counter, r.action, ''].join('\t')).join('\n');
+  navigator.clipboard.writeText(tsv).then(() => {
+    const btn = document.getElementById('copy-watchers-btn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '✅ Copied!'; btn.style.background = '#2e7d32';
+    setTimeout(() => { btn.innerHTML = orig; btn.style.background = '#1565c0'; }, 2000);
+  });
+}
+
 // ── Search ───────────────────────────────────────────────────────
 function doSearch(val) {
   const id = val.trim();
@@ -715,6 +937,7 @@ function doSearch(val) {
     <div style="margin-top:10px;font-size:12px;color:#999;text-align:center">
       أيام عمل: ${r.workdays} &nbsp;|&nbsp; ساعات فعلية: ${r.actwork}h
     </div>
+    ${rawHistory ? `<div style="margin-top:12px;text-align:center">${vcPill(r.id)}</div>` : ''}
   </div>`;
 }
 </script>
